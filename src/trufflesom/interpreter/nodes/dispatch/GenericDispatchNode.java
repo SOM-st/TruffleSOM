@@ -1,11 +1,11 @@
 package trufflesom.interpreter.nodes.dispatch;
 
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.nodes.InvalidAssumptionException;
 
 import trufflesom.interpreter.SArguments;
 import trufflesom.primitives.reflection.ObjectPrims.ClassPrim;
@@ -22,47 +22,38 @@ public final class GenericDispatchNode extends AbstractDispatchNode {
   @Child private ClassPrim        classNode;
 
   protected final SSymbol selector;
-  private final Universe  universe;
 
   public GenericDispatchNode(final SSymbol selector, final Universe universe) {
+    super(null);
     this.selector = selector;
-    this.universe = universe;
-    call = Truffle.getRuntime().createIndirectCallNode();
-    classNode = ClassPrimFactory.create(null);
+    call = insert(Truffle.getRuntime().createIndirectCallNode());
+    classNode = insert(ClassPrimFactory.create(null));
     classNode.initialize(universe);
   }
 
   @TruffleBoundary
-  private Object dispatch(final Object[] arguments) {
-    Object rcvr = arguments[0];
-    SClass rcvrClass = classNode.executeEvaluated(rcvr);
-    SInvokable method = rcvrClass.lookupInvokable(selector);
+  private Object sendDnu(final SClass rcvrClass, final Object[] arguments) {
+    // Won't use DNU caching here, because it is already a megamorphic node
+    SArray argumentsArray = SArguments.getArgumentsWithoutReceiver(arguments);
+    Object[] args = new Object[] {arguments[0], selector, argumentsArray};
+    CallTarget target = CachedDnuNode.getDnuCallTarget(rcvrClass);
 
-    CallTarget target;
-    Object[] args;
-
-    if (method != null) {
-      target = method.getCallTarget();
-      args = arguments;
-    } else {
-      // TODO: actually do use node
-      CompilerDirectives.transferToInterpreter();
-      // Won't use DNU caching here, because it is already a megamorphic node
-      SArray argumentsArray = SArguments.getArgumentsWithoutReceiver(arguments);
-      args = new Object[] {arguments[0], selector, argumentsArray};
-      target = CachedDnuNode.getDnuCallTarget(rcvrClass, universe);
-    }
     return call.call(target, args);
   }
 
   @Override
-  public Object executeDispatch(
-      final VirtualFrame frame, final Object[] arguments) {
-    return dispatch(arguments);
+  public Object doPreEvaluated(final VirtualFrame frame, final Object[] arguments) {
+    Object rcvr = arguments[0];
+    SClass rcvrClass = classNode.executeEvaluated(rcvr);
+    SInvokable method = rcvrClass.lookupInvokable(selector);
+    if (method != null) {
+      return call.call(method.getCallTarget(), arguments);
+    }
+    return sendDnu(rcvrClass, arguments);
   }
 
   @Override
-  public int lengthOfDispatchChain() {
-    return 1000;
+  public boolean entryMatches(final Object rcvr) throws InvalidAssumptionException {
+    return true;
   }
 }

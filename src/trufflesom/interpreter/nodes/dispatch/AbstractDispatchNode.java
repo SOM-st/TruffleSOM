@@ -4,32 +4,61 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.InvalidAssumptionException;
 import com.oracle.truffle.api.nodes.Node;
 
+import bd.primitives.nodes.PreevaluatedExpression;
 
-public abstract class AbstractDispatchNode extends Node implements DispatchChain {
+
+public abstract class AbstractDispatchNode extends Node implements PreevaluatedExpression {
   public static final int INLINE_CACHE_SIZE = 6;
 
-  public abstract Object executeDispatch(VirtualFrame frame, Object[] arguments);
+  private final DispatchGuard guard;
 
-  public abstract static class AbstractCachedDispatchNode
-      extends AbstractDispatchNode {
+  @Child public AbstractDispatchNode next;
 
-    @Child protected DirectCallNode       cachedMethod;
-    @Child protected AbstractDispatchNode nextInCache;
+  protected AbstractDispatchNode(final DispatchGuard guard) {
+    this.guard = guard;
+  }
 
-    public AbstractCachedDispatchNode(final CallTarget methodCallTarget,
-        final AbstractDispatchNode nextInCache) {
-      DirectCallNode cachedMethod =
-          Truffle.getRuntime().createDirectCallNode(methodCallTarget);
+  @Override
+  public abstract Object doPreEvaluated(VirtualFrame frame, Object[] args);
 
-      this.cachedMethod = cachedMethod;
-      this.nextInCache = nextInCache;
+  public boolean entryMatches(final Object rcvr) throws InvalidAssumptionException {
+    return guard.entryMatches(rcvr);
+  }
+
+  public final <T extends Node> T insertHere(final T newChild) {
+    return super.insert(newChild);
+  }
+
+  public static final class CachedDispatchNode extends AbstractDispatchNode {
+
+    @Child protected DirectCallNode cachedMethod;
+
+    public CachedDispatchNode(final DispatchGuard guard, final CallTarget callTarget) {
+      super(guard);
+      cachedMethod = insert(Truffle.getRuntime().createDirectCallNode(callTarget));
     }
 
     @Override
-    public final int lengthOfDispatchChain() {
-      return 1 + nextInCache.lengthOfDispatchChain();
+    public Object doPreEvaluated(final VirtualFrame frame, final Object[] arguments) {
+      return cachedMethod.call(arguments);
+    }
+  }
+
+  public static final class CachedExprNode extends AbstractDispatchNode {
+
+    @Child protected PreevaluatedExpression expr;
+
+    public CachedExprNode(final DispatchGuard guard, final PreevaluatedExpression expr) {
+      super(guard);
+      this.expr = expr;
+    }
+
+    @Override
+    public Object doPreEvaluated(final VirtualFrame frame, final Object[] arguments) {
+      return expr.doPreEvaluated(frame, arguments);
     }
   }
 }
