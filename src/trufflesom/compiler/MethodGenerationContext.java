@@ -50,12 +50,10 @@ import trufflesom.interpreter.Method;
 import trufflesom.interpreter.nodes.ExpressionNode;
 import trufflesom.interpreter.nodes.FieldNode;
 import trufflesom.interpreter.nodes.FieldNode.FieldReadNode;
-import trufflesom.interpreter.nodes.FieldNode.UninitFieldIncNode;
 import trufflesom.interpreter.nodes.FieldNodeFactory.FieldWriteNodeGen;
 import trufflesom.interpreter.nodes.ReturnNonLocalNode;
 import trufflesom.interpreter.nodes.ReturnNonLocalNode.CatchNonLocalReturnNode;
 import trufflesom.interpreter.nodes.literals.BlockNode;
-import trufflesom.interpreter.nodes.specialized.IntIncrementNode;
 import trufflesom.primitives.Primitives;
 import trufflesom.vmobjects.SClass;
 import trufflesom.vmobjects.SInvokable;
@@ -444,10 +442,6 @@ public class MethodGenerationContext
 
     int fieldIndex = holderGenc.getFieldIndex(fieldName);
     ExpressionNode self = getSelfRead(coord);
-    if (exp instanceof IntIncrementNode
-        && ((IntIncrementNode) exp).doesAccessField(fieldIndex)) {
-      return new UninitFieldIncNode(self, fieldIndex, coord);
-    }
 
     return FieldWriteNodeGen.create(fieldIndex, self, exp).initialize(coord);
   }
