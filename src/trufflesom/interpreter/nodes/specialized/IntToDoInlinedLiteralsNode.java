@@ -5,7 +5,6 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.frame.FrameSlot;
 import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
@@ -14,17 +13,17 @@ import com.oracle.truffle.api.nodes.RootNode;
 import bd.inlining.Inline;
 import bd.inlining.ScopeAdaptationVisitor;
 import bd.inlining.ScopeAdaptationVisitor.ScopeElement;
-import trufflesom.compiler.Variable;
 import trufflesom.compiler.Variable.Local;
 import trufflesom.interpreter.Invokable;
 import trufflesom.interpreter.nodes.ExpressionNode;
+import trufflesom.interpreter.nodes.NoPreEvalExprNode;
 
 
 @NodeChild(value = "from", type = ExpressionNode.class)
 @NodeChild(value = "to", type = ExpressionNode.class)
 @Inline(selector = "to:do:", inlineableArgIdx = 2, introduceTemps = 2, disabled = true)
 @GenerateNodeFactory
-public abstract class IntToDoInlinedLiteralsNode extends ExpressionNode {
+public abstract class IntToDoInlinedLiteralsNode extends NoPreEvalExprNode {
 
   @Child protected ExpressionNode body;
 
@@ -32,8 +31,8 @@ public abstract class IntToDoInlinedLiteralsNode extends ExpressionNode {
   // original node around
   private final ExpressionNode bodyActualNode;
 
-  private final FrameSlot loopIndex;
-  private final Variable  loopIdxVar;
+  private final int   loopIdxVarIndex;
+  private final Local loopIdxVar;
 
   public abstract ExpressionNode getFrom();
 
@@ -47,11 +46,11 @@ public abstract class IntToDoInlinedLiteralsNode extends ExpressionNode {
       final ExpressionNode body, final Local loopIdxVar) {
     this.body = body;
     this.loopIdxVar = loopIdxVar;
-    this.loopIndex = loopIdxVar.getSlot();
+    this.loopIdxVarIndex = loopIdxVar.getIndex();
     this.bodyActualNode = originalBody;
 
     // and, we can already tell the loop index that it is going to be long
-    loopIndex.setKind(FrameSlotKind.Long);
+    // loopIdxVar.getFrameDescriptor().setSlotKind(loopIdxVarIndex, FrameSlotKind.Long);
   }
 
   @Specialization
@@ -83,12 +82,41 @@ public abstract class IntToDoInlinedLiteralsNode extends ExpressionNode {
   }
 
   protected final void doLooping(final VirtualFrame frame, final long from, final long to) {
+    loopIdxVar.getFrameDescriptor().setSlotKind(loopIdxVarIndex, FrameSlotKind.Long);
     if (from <= to) {
-      frame.setLong(loopIndex, from);
+      frame.setLong(loopIdxVarIndex, from);
       body.executeGeneric(frame);
     }
     for (long i = from + 1; i <= to; i++) {
-      frame.setLong(loopIndex, i);
+      frame.setLong(loopIdxVarIndex, i);
+      body.executeGeneric(frame);
+    }
+  }
+
+  @Specialization
+  public final double doDoubleToDo(final VirtualFrame frame, final double from,
+      final double to) {
+    this.loopIdxVar.getFrameDescriptor().setSlotKind(loopIdxVarIndex, FrameSlotKind.Double);
+    if (CompilerDirectives.inInterpreter()) {
+      try {
+        doLoopingDouble(frame, from, to);
+      } finally {
+        reportLoopCount((int) (to - from));
+      }
+    } else {
+      doLoopingDouble(frame, from, to);
+    }
+    return from;
+  }
+
+  protected final void doLoopingDouble(final VirtualFrame frame, final double from,
+      final double to) {
+    if (from <= to) {
+      frame.setDouble(loopIdxVarIndex, from);
+      body.executeGeneric(frame);
+    }
+    for (double i = from + 1.0; i <= to; i += 1.0) {
+      frame.setDouble(loopIdxVarIndex, i);
       body.executeGeneric(frame);
     }
   }
@@ -113,7 +141,7 @@ public abstract class IntToDoInlinedLiteralsNode extends ExpressionNode {
     ScopeElement<ExpressionNode> se = inliner.getAdaptedVar(loopIdxVar);
     IntToDoInlinedLiteralsNode node = IntToDoInlinedLiteralsNodeFactory.create(bodyActualNode,
         body, (Local) se.var, getFrom(), getTo());
-    node.initialize(sourceSection);
+    node.initialize(sourceCoord);
     replace(node);
   }
 }

@@ -7,6 +7,8 @@ import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.Specialization;
 
 import bd.primitives.Primitive;
+import trufflesom.vm.SymbolTable;
+import trufflesom.vmobjects.SSymbol;
 
 
 @GenerateNodeFactory
@@ -14,26 +16,14 @@ import bd.primitives.Primitive;
 @Primitive(className = "Double", primitive = ">")
 @Primitive(selector = ">")
 public abstract class GreaterThanPrim extends ArithmeticPrim {
+  @Override
+  public SSymbol getSelector() {
+    return SymbolTable.symbolFor(">");
+  }
+
   @Specialization
   public final boolean doLong(final long left, final long right) {
     return left > right;
-  }
-
-  @Specialization
-  @TruffleBoundary
-  public final boolean doBigInteger(final BigInteger left, final BigInteger right) {
-    return left.compareTo(right) > 0;
-  }
-
-  @Specialization
-  public final boolean doDouble(final double left, final double right) {
-    return left > right;
-  }
-
-  @Specialization
-  @TruffleBoundary
-  public final boolean doLong(final long left, final BigInteger right) {
-    return doBigInteger(BigInteger.valueOf(left), right);
   }
 
   @Specialization
@@ -43,12 +33,35 @@ public abstract class GreaterThanPrim extends ArithmeticPrim {
 
   @Specialization
   @TruffleBoundary
-  public final boolean doBigInteger(final BigInteger left, final long right) {
-    return doBigInteger(left, BigInteger.valueOf(right));
+  public final boolean doLong(final long left, final BigInteger right) {
+    return doBigInteger(BigInteger.valueOf(left), right);
   }
 
   @Specialization
   public final boolean doDouble(final double left, final long right) {
     return doDouble(left, (double) right);
+  }
+
+  @Specialization
+  public final boolean doDouble(final double left, final double right) {
+    return left > right;
+  }
+
+  @Specialization
+  @TruffleBoundary
+  public final boolean doDouble(final double left, final BigInteger right) {
+    return left > right.doubleValue();
+  }
+
+  @Specialization
+  @TruffleBoundary
+  public final boolean doBigInteger(final BigInteger left, final BigInteger right) {
+    return left.compareTo(right) > 0;
+  }
+
+  @Specialization
+  @TruffleBoundary
+  public final boolean doBigInteger(final BigInteger left, final long right) {
+    return doBigInteger(left, BigInteger.valueOf(right));
   }
 }
