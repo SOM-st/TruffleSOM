@@ -34,7 +34,6 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.source.SourceSection;
 
 import bd.tools.structure.StructuralProbe;
-import trufflesom.compiler.Parser.ParseError;
 import trufflesom.interpreter.SomLanguage;
 import trufflesom.vm.Universe;
 import trufflesom.vmobjects.SClass;
@@ -118,14 +117,7 @@ public final class ClassGenerationContext {
     }
   }
 
-  public void addInstanceMethod(final SInvokable meth, final Parser<?> parser)
-      throws ParseError {
-    if (instanceMethods.containsKey(meth.getSignature())) {
-      String msg = "A method with name " + meth.getSignature().getString()
-          + " is already declared in " + name.getString();
-      throw new ParseError(msg, Symbol.NONE, parser);
-    }
-
+  public void addInstanceMethod(final SInvokable meth) {
     instanceMethods.put(meth.getSignature(), meth);
     if (meth instanceof SPrimitive) {
       instanceHasPrimitives = true;
@@ -136,13 +128,7 @@ public final class ClassGenerationContext {
     classSide = true;
   }
 
-  public void addClassMethod(final SInvokable meth, final Parser<?> parser) throws ParseError {
-    if (classMethods.containsKey(meth.getSignature())) {
-      String msg = "A method with name " + meth.getSignature().getString()
-          + " is already declared in " + name.getString();
-      throw new ParseError(msg, Symbol.NONE, parser);
-    }
-
+  public void addClassMethod(final SInvokable meth) {
     classMethods.put(meth.getSignature(), meth);
     if (meth instanceof SPrimitive) {
       classHasPrimitives = true;

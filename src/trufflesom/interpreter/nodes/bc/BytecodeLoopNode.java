@@ -147,13 +147,13 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
   private static final ValueProfile frameType = ValueProfile.createClassProfile();
   private static final LiteralNode  dummyNode = new IntegerLiteralNode(0);
 
-  @CompilationFinal(dimensions = 1) private final byte[]      bytecodesField;
-  @CompilationFinal(dimensions = 1) private final FrameSlot[] localsAndOutersField;
-  @CompilationFinal(dimensions = 1) private final Object[]    literalsAndConstantsField;
+  @CompilationFinal(dimensions = 1) private final byte[]      bytecodes;
+  @CompilationFinal(dimensions = 1) private final FrameSlot[] localsAndOuters;
+  @CompilationFinal(dimensions = 1) private final Object[]    literalsAndConstants;
 
-  @CompilationFinal(dimensions = 1) private final BackJump[] inlinedLoopsField;
+  @CompilationFinal(dimensions = 1) private final BackJump[] inlinedLoops;
 
-  @Children private final Node[] quickenedField;
+  @Children private final Node[] quickened;
 
   private final int      numLocals;
   private final int      maxStackDepth;
@@ -165,29 +165,28 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
       final FrameSlot[] localsAndOuters, final Object[] literals, final int maxStackDepth,
       final FrameSlot frameOnStackMarker, final BackJump[] inlinedLoops,
       final Universe universe) {
-    this.bytecodesField = bytecodes;
+    this.bytecodes = bytecodes;
     this.numLocals = numLocals;
-    this.localsAndOutersField = localsAndOuters;
-    this.literalsAndConstantsField = literals;
+    this.localsAndOuters = localsAndOuters;
+    this.literalsAndConstants = literals;
     this.maxStackDepth = maxStackDepth;
-    this.inlinedLoopsField = inlinedLoops;
+    this.inlinedLoops = inlinedLoops;
     this.universe = universe;
 
     this.frameOnStackMarker = frameOnStackMarker;
 
-    this.quickenedField = new Node[bytecodes.length];
+    this.quickened = new Node[bytecodes.length];
   }
 
   @Override
   public Node deepCopy() {
     return new BytecodeLoopNode(
-        bytecodesField.clone(), numLocals, localsAndOutersField, literalsAndConstantsField,
-        maxStackDepth, frameOnStackMarker, inlinedLoopsField, universe).initialize(
-            sourceSection);
+        bytecodes.clone(), numLocals, localsAndOuters, literalsAndConstants,
+        maxStackDepth, frameOnStackMarker, inlinedLoops, universe).initialize(sourceSection);
   }
 
   public String getNameOfLocal(final int idx) {
-    Local l = (Local) localsAndOutersField[idx].getIdentifier();
+    Local l = (Local) localsAndOuters[idx].getIdentifier();
     return l.name.getString();
   }
 
@@ -231,20 +230,14 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
   }
 
   public void requicken(final int bytecodeIndex, final byte bytecode, final Node node) {
-    bytecodesField[bytecodeIndex] = bytecode;
-    quickenedField[bytecodeIndex] = insert(node);
+    bytecodes[bytecodeIndex] = bytecode;
+    quickened[bytecodeIndex] = insert(node);
   }
 
   @Override
   @ExplodeLoop(kind = LoopExplosionKind.MERGE_EXPLODE)
   public Object executeGeneric(final VirtualFrame frame) {
     Object[] stack = new Object[maxStackDepth];
-
-    final byte[] bytecodes = bytecodesField;
-    final FrameSlot[] localsAndOuters = localsAndOutersField;
-    final Node[] quickened = quickenedField;
-    final Object[] literalsAndConstants = literalsAndConstantsField;
-
     int stackPointer = -1;
     int bytecodeIndex = 0;
 
@@ -447,12 +440,12 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
           byte literalIdx = bytecodes[bytecodeIndex + 1];
           SSymbol globalName = (SSymbol) literalsAndConstants[literalIdx];
 
-          GlobalNode quick =
+          GlobalNode quickened =
               GlobalNode.create(globalName, universe, null).initialize(sourceSection);
-          quickenBytecode(bytecodeIndex, Q_PUSH_GLOBAL, quick);
+          quickenBytecode(bytecodeIndex, Q_PUSH_GLOBAL, quickened);
 
           stackPointer += 1;
-          stack[stackPointer] = quick.executeGeneric(frame);
+          stack[stackPointer] = quickened.executeGeneric(frame);
           break;
         }
 
@@ -582,45 +575,45 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
 
               if (specializer != null) {
                 done = true;
-                ExpressionNode quick = specializer.create(callArgs, dummyArgs,
+                ExpressionNode quickened = specializer.create(callArgs, dummyArgs,
                     sourceSection, !specializer.noWrapper(), universe);
 
                 if (numberOfArguments == 1) {
-                  UnaryExpressionNode q = (UnaryExpressionNode) quick;
+                  UnaryExpressionNode q = (UnaryExpressionNode) quickened;
                   if (!specializer.noWrapper()) {
-                    quick = q = new UnaryPrimitiveWrapper(
+                    quickened = q = new UnaryPrimitiveWrapper(
                         bytecodeIndex, signature, q, universe, sourceSection);
                   }
-                  quickenBytecode(bytecodeIndex, Q_SEND_1, q);
+                  quickenBytecode(bytecodeIndex, Q_SEND_1, quickened);
                   result = q.executeEvaluated(frame, callArgs[0]);
                 } else if (numberOfArguments == 2) {
-                  BinaryExpressionNode q = (BinaryExpressionNode) quick;
+                  BinaryExpressionNode q = (BinaryExpressionNode) quickened;
 
                   if (!specializer.noWrapper()) {
-                    quick = q = new BinaryPrimitiveWrapper(
+                    quickened = q = new BinaryPrimitiveWrapper(
                         bytecodeIndex, signature, q, universe, sourceSection);
                   }
-                  quickenBytecode(bytecodeIndex, Q_SEND_2, q);
+                  quickenBytecode(bytecodeIndex, Q_SEND_2, quickened);
                   result = q.executeEvaluated(frame, callArgs[0], callArgs[1]);
                 } else if (numberOfArguments == 3) {
-                  TernaryExpressionNode q = (TernaryExpressionNode) quick;
+                  TernaryExpressionNode q = (TernaryExpressionNode) quickened;
 
                   if (!specializer.noWrapper()) {
-                    quick = q = new TernaryPrimitiveWrapper(
+                    quickened = q = new TernaryPrimitiveWrapper(
                         bytecodeIndex, signature, q, universe, sourceSection);
                   }
-                  quickenBytecode(bytecodeIndex, Q_SEND_3, q);
+                  quickenBytecode(bytecodeIndex, Q_SEND_3, quickened);
                   result = q.executeEvaluated(frame, callArgs[0], callArgs[1], callArgs[2]);
                 }
               }
             }
 
             if (!done) {
-              GenericMessageSendNode quick =
+              GenericMessageSendNode quickened =
                   MessageSendNode.createGeneric(signature, null, sourceSection, universe);
-              quickenBytecode(bytecodeIndex, Q_SEND, quick);
+              quickenBytecode(bytecodeIndex, Q_SEND, quickened);
 
-              result = quick.doPreEvaluated(frame, callArgs);
+              result = quickened.doPreEvaluated(frame, callArgs);
             }
 
             stackPointer += 1;
@@ -653,11 +646,11 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
                 numberOfArguments);
             stackPointer -= numberOfArguments;
 
-            PreevaluatedExpression quick = MessageSendNode.createSuperSend(
+            PreevaluatedExpression quickened = MessageSendNode.createSuperSend(
                 (SClass) getHolder().getSuperClass(), signature, null, sourceSection);
-            quickenBytecode(bytecodeIndex, Q_SEND, (Node) quick);
+            quickenBytecode(bytecodeIndex, Q_SEND, (Node) quickened);
 
-            Object result = quick.doPreEvaluated(frame, callArgs);
+            Object result = quickened.doPreEvaluated(frame, callArgs);
 
             stackPointer += 1;
             stack[stackPointer] = result;
@@ -1098,8 +1091,8 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
 
   private void quickenBytecode(final int bytecodeIndex, final byte quickenedBytecode,
       final Node quickenedNode) {
-    quickenedField[bytecodeIndex] = insert(quickenedNode);
-    bytecodesField[bytecodeIndex] = quickenedBytecode;
+    this.quickened[bytecodeIndex] = insert(quickenedNode);
+    bytecodes[bytecodeIndex] = quickenedBytecode;
   }
 
   private SClass getHolder() {
@@ -1108,7 +1101,7 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
 
   private void doReturnNonLocal(final VirtualFrame frame, final int bytecodeIndex,
       final Object result) {
-    byte contextIdx = bytecodesField[bytecodeIndex + 1];
+    byte contextIdx = bytecodes[bytecodeIndex + 1];
 
     MaterializedFrame ctx = determineContext(frame, contextIdx);
     FrameOnStackMarker marker =
@@ -1138,23 +1131,23 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
   }
 
   public int getNumberOfBytecodes() {
-    return bytecodesField.length;
+    return bytecodes.length;
   }
 
   public List<Byte> getBytecodes() {
-    List<Byte> list = new ArrayList<>(bytecodesField.length);
-    for (byte b : bytecodesField) {
+    List<Byte> list = new ArrayList<>(bytecodes.length);
+    for (byte b : bytecodes) {
       list.add(b);
     }
     return list;
   }
 
   public byte[] getBytecodeArray() {
-    return bytecodesField;
+    return bytecodes;
   }
 
   public Object getConstant(final int idx) {
-    return literalsAndConstantsField[idx];
+    return literalsAndConstants[idx];
   }
 
   @Override
@@ -1237,8 +1230,8 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
 
   private PriorityQueue<BackJump> createBackwardJumpQueue() {
     PriorityQueue<BackJump> loops = new PriorityQueue<>();
-    if (inlinedLoopsField != null) {
-      for (BackJump l : inlinedLoopsField) {
+    if (inlinedLoops != null) {
+      for (BackJump l : inlinedLoops) {
         loops.add(l);
       }
     }
@@ -1267,10 +1260,6 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
 
   private void inlineInto(final BytecodeMethodGenContext mgenc, final int targetContextLevel)
       throws ParseError {
-    final byte[] bytecodes = bytecodesField;
-    final FrameSlot[] localsAndOuters = localsAndOutersField;
-    final Object[] literalsAndConstants = literalsAndConstantsField;
-
     PriorityQueue<Jump> jumps = new PriorityQueue<>();
     PriorityQueue<BackJump> loops = createBackwardJumpQueue();
     PriorityQueue<BackJumpPatch> backJumps = new PriorityQueue<>();
@@ -1519,10 +1508,6 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
 
   private void adapt(final ScopeAdaptationVisitor inliner,
       final boolean requiresChangesToContextLevels) {
-    final byte[] bytecodes = bytecodesField;
-    final FrameSlot[] localsAndOuters = localsAndOutersField;
-    final Object[] literalsAndConstants = literalsAndConstantsField;
-
     FrameSlot[] oldLocalsAndOuters = Arrays.copyOf(localsAndOuters, localsAndOuters.length);
 
     int i = 0;
@@ -1717,11 +1702,11 @@ public class BytecodeLoopNode extends ExpressionNode implements ScopeReference {
       return;
     }
 
-    byte contextIdx = bytecodesField[i + 2];
+    byte contextIdx = bytecodes[i + 2];
     if (contextIdx >= inliner.contextLevel) {
       byte ctx = (byte) (contextIdx - 1);
       assert ctx >= 0;
-      bytecodesField[i + 2] = ctx;
+      bytecodes[i + 2] = ctx;
     }
   }
 

@@ -24,13 +24,17 @@
 
 package trufflesom.compiler;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import bd.source.SourceCoordinate;
 
 
 public final class Lexer {
 
-  private static final String SEPARATOR = "----";
-  private static final String PRIMITIVE = "primitive";
+  private static final String SEPARATOR     = "----";
+  private static final String PRIMITIVE     = "primitive";
+  private List<Integer>       commentTokens = new ArrayList<Integer>();
 
   public static final class Peek {
     public final Symbol nextSym;
@@ -424,14 +428,21 @@ public final class Lexer {
 
   private void skipComment() {
     if (currentChar() == '"') {
+      int length = 0;
+      int col = state.ptr - state.lastLineEnd;
       do {
+        length++;
         if (currentChar() == '\n') {
+          addCoordsToTokens(state.lineNumber - 1, 0, length);
           state.lineNumber += 1;
           state.lastLineEnd = state.ptr;
+          length = 0;
         }
         state.incPtr();
       } while (currentChar() != '"');
+      addCoordsToTokens(state.lineNumber - 1, col - 1, length + 1);
       state.incPtr();
+
     }
   }
 
@@ -475,6 +486,19 @@ public final class Lexer {
       return false;
     }
     return !isIdentifierChar(nextChar(text.length()));
+  }
+
+  public List<Integer> getCommentsPositions() {
+    return commentTokens;
+  }
+
+  private void addCoordsToTokens(final int line, final int col, final int length) {
+
+    commentTokens.add(line);
+    commentTokens.add(col);
+    commentTokens.add(length);
+    commentTokens.add(5);
+    commentTokens.add(0);
   }
 
 }

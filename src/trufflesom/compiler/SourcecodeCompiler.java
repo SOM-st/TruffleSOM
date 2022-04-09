@@ -99,7 +99,6 @@ public class SourcecodeCompiler {
 
     SClass result = systemClass;
     parser.classdef(cgc);
-
     if (systemClass == null) {
       result = cgc.assemble();
     } else {

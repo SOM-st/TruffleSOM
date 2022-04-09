@@ -231,6 +231,7 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   public void classdef(final ClassGenerationContext cgenc) throws ProgramDefinitionError {
     cgenc.setName(symbolFor(text));
     SourceCoordinate coord = getCoordinate();
+    storePosition(coord, cgenc.getName().getString(), SemanticTokenType.CLASS.value);
     if ("Object".equals(text)) {
       universe.selfSource = getSource(coord);
     }
@@ -250,8 +251,7 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
       ExpressionNode methodBody = method(mgenc);
 
       cgenc.addInstanceMethod(
-          mgenc.assemble(methodBody, lastMethodsSourceSection, lastFullMethodsSourceSection),
-          this);
+          mgenc.assemble(methodBody, lastMethodsSourceSection, lastFullMethodsSourceSection));
     }
 
     if (accept(Separator)) {
@@ -264,12 +264,12 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
         ExpressionNode methodBody = method(mgenc);
 
         cgenc.addClassMethod(mgenc.assemble(
-            methodBody, lastMethodsSourceSection, lastFullMethodsSourceSection),
-            this);
+            methodBody, lastMethodsSourceSection, lastFullMethodsSourceSection));
       }
     }
     expect(EndTerm);
     cgenc.setSourceSection(getSource(coord));
+
   }
 
   private void superclass(final ClassGenerationContext cgenc) throws ParseError {
@@ -368,7 +368,9 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   public ExpressionNode method(final MGenC mgenc)
       throws ProgramDefinitionError {
     lastCoordinate = getCoordinate();
+
     pattern(mgenc);
+    storePosition(lastCoordinate, mgenc.signature.getString(), SemanticTokenType.METHOD.value);
     expect(Equal);
     if (sym == Primitive) {
       mgenc.markAsPrimitive();
@@ -391,7 +393,10 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   }
 
   private void primitiveBlock() throws ParseError {
+    SourceCoordinate coord = getCoordinate();
     expect(Primitive);
+
+    storePosition(coord, Primitive.toString(), SemanticTokenType.KEYWORD.value);
     lastMethodsSourceSection = lastFullMethodsSourceSection = getSource(lastCoordinate);
   }
 
@@ -455,7 +460,11 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   }
 
   protected SSymbol unarySelector() throws ParseError {
-    return identifier();
+
+    SourceCoordinate coord = getCoordinate();
+    SSymbol s = identifier();
+    storePosition(coord, s.getString(), SemanticTokenType.METHOD.value);
+    return s;
   }
 
   protected SSymbol binarySelector() throws ParseError {
@@ -475,18 +484,21 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   }
 
   private SSymbol identifier() throws ParseError {
+
     String s = new String(text);
     boolean isPrimitive = accept(Primitive);
     if (!isPrimitive) {
       expect(Identifier);
     }
+
     return symbolFor(s);
   }
 
   protected String keyword() throws ParseError {
+    SourceCoordinate coord = getCoordinate();
     String s = new String(text);
     expect(Keyword);
-
+    storePosition(coord, s, SemanticTokenType.KEYWORD.value);
     return s;
   }
 
@@ -508,6 +520,7 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
     while (isIdentifier(sym)) {
       SourceCoordinate coord = getCoordinate();
       SSymbol var = variable();
+      storePosition(coord, var.getString(), SemanticTokenType.VARIABLE.value);
       if (mgenc.hasLocal(var)) {
         throw new ParseError("Declared the variable " + var.getString() + " multiple times.",
             null, this);
@@ -537,13 +550,18 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   protected abstract ExpressionNode evaluation(MGenC mgenc) throws ProgramDefinitionError;
 
   protected SSymbol assignment() throws ParseError {
+
     SSymbol v = variable();
     expect(Assign);
+
     return v;
   }
 
   protected SSymbol variable() throws ParseError {
-    return identifier();
+    SourceCoordinate coord = getCoordinate();
+    SSymbol s = identifier();
+    storePosition(coord, s.getString(), SemanticTokenType.VARIABLE.value);
+    return s;
   }
 
   protected ExpressionNode nestedTerm(final MGenC mgenc) throws ProgramDefinitionError {
@@ -633,8 +651,11 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   }
 
   private String string() throws ParseError {
+    SourceCoordinate coord = getCoordinate();
     String s = new String(text);
+    storePosition(coord, s + "''", SemanticTokenType.STRING.value);
     expect(STString);
+
     return s;
   }
 
@@ -693,4 +714,31 @@ public abstract class Parser<MGenC extends MethodGenerationContext> {
   private static boolean printableSymbol(final Symbol sym) {
     return sym == Integer || sym == Double || sym.compareTo(STString) >= 0;
   }
+
+  protected void storePosition(final SourceCoordinate coords, final String className,
+      final int tokenTypevalue) {
+    // method stub
+  }
+
+  public enum SemanticTokenType {
+    CLASS(0),
+    KEYWORD(1),
+    METHOD(2),
+    STRING(3),
+    VARIABLE(4),
+    COMMENT(5),
+    TYPE(6),
+    PROPERTY(7),
+    OPERATIOR(8),
+    PARAMETER(9),
+    FUNCTION(10),
+    NUMBER(11);
+
+    public final int value;
+
+    private SemanticTokenType(final int value) {
+      this.value = value;
+    }
+  }
+
 }
