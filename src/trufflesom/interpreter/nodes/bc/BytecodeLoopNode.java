@@ -108,7 +108,6 @@ import trufflesom.compiler.bc.BytecodeMethodGenContext;
 import trufflesom.interpreter.EscapedBlockException;
 import trufflesom.interpreter.FrameOnStackMarker;
 import trufflesom.interpreter.Invokable;
-import trufflesom.interpreter.LexicalScope;
 import trufflesom.interpreter.Method;
 import trufflesom.interpreter.ReturnException;
 import trufflesom.interpreter.Types;
@@ -240,6 +239,8 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
     quickenedField[bytecodeIndex] = insert(node);
   }
 
+  private static final int RETURN_FROM_METHOD = -1;
+
   @Override
   @ExplodeLoop(kind = LoopExplosionKind.MERGE_EXPLODE)
   @BytecodeInterpreterSwitch
@@ -255,7 +256,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
 
     int backBranchesTaken = 0;
 
-    while (true) {
+    Object returnValue = null;
+
+    while (bytecodeIndex != RETURN_FROM_METHOD) {
       byte bytecode = bytecodes[bytecodeIndex];
       final int bytecodeLength = getBytecodeLength(bytecode);
       int nextBytecodeIndex = bytecodeIndex + bytecodeLength;
@@ -266,7 +269,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
 
       switch (bytecode) {
         case HALT: {
-          return stack[stackPointer];
+          returnValue = stack[stackPointer];
+          nextBytecodeIndex = RETURN_FROM_METHOD;
+          break;
         }
 
         case DUP: {
@@ -632,7 +637,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
 
         case RETURN_LOCAL: {
           LoopNode.reportLoopCount(this, backBranchesTaken);
-          return stack[stackPointer];
+          returnValue = stack[stackPointer];
+          nextBytecodeIndex = RETURN_FROM_METHOD;
+          break;
         }
 
         case RETURN_NON_LOCAL: {
@@ -646,7 +653,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
 
         case RETURN_SELF: {
           LoopNode.reportLoopCount(this, backBranchesTaken);
-          return frame.getArguments()[0];
+          returnValue = frame.getArguments()[0];
+          nextBytecodeIndex = RETURN_FROM_METHOD;
+          break;
         }
 
         case RETURN_FIELD_0: {
@@ -656,7 +665,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
             node = quickened[bytecodeIndex] = insert(FieldAccessorNode.createRead(0));
           }
 
-          return ((AbstractReadFieldNode) node).read((SObject) frame.getArguments()[0]);
+          returnValue = ((AbstractReadFieldNode) node).read((SObject) frame.getArguments()[0]);
+          nextBytecodeIndex = RETURN_FROM_METHOD;
+          break;
         }
         case RETURN_FIELD_1: {
           Node node = quickened[bytecodeIndex];
@@ -665,7 +676,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
             node = quickened[bytecodeIndex] = insert(FieldAccessorNode.createRead(1));
           }
 
-          return ((AbstractReadFieldNode) node).read((SObject) frame.getArguments()[0]);
+          returnValue = ((AbstractReadFieldNode) node).read((SObject) frame.getArguments()[0]);
+          nextBytecodeIndex = RETURN_FROM_METHOD;
+          break;
         }
         case RETURN_FIELD_2: {
           Node node = quickened[bytecodeIndex];
@@ -674,7 +687,9 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
             node = quickened[bytecodeIndex] = insert(FieldAccessorNode.createRead(2));
           }
 
-          return ((AbstractReadFieldNode) node).read((SObject) frame.getArguments()[0]);
+          returnValue = ((AbstractReadFieldNode) node).read((SObject) frame.getArguments()[0]);
+          nextBytecodeIndex = RETURN_FROM_METHOD;
+          break;
         }
 
         case INC: {
@@ -1026,6 +1041,8 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
 
       bytecodeIndex = nextBytecodeIndex;
     }
+
+    return returnValue;
   }
 
   public Object specializeSendBytecode(final VirtualFrame frame, final int bytecodeIndex,
