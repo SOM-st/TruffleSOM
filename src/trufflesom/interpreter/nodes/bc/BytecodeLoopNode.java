@@ -241,6 +241,10 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
 
   private static final int RETURN_FROM_METHOD = -1;
 
+  private static final class BackBranchCounter {
+    int backBranchesTaken;
+  }
+
   @Override
   @ExplodeLoop(kind = LoopExplosionKind.MERGE_EXPLODE)
   @BytecodeInterpreterSwitch
@@ -254,7 +258,7 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
     int stackPointer = -1;
     int bytecodeIndex = 0;
 
-    int backBranchesTaken = 0;
+    BackBranchCounter c = new BackBranchCounter();
 
     Object returnValue = null;
 
@@ -636,14 +640,14 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
         }
 
         case RETURN_LOCAL: {
-          LoopNode.reportLoopCount(this, backBranchesTaken);
+          LoopNode.reportLoopCount(this, c.backBranchesTaken);
           returnValue = stack[stackPointer];
           nextBytecodeIndex = RETURN_FROM_METHOD;
           break;
         }
 
         case RETURN_NON_LOCAL: {
-          LoopNode.reportLoopCount(this, backBranchesTaken);
+          LoopNode.reportLoopCount(this, c.backBranchesTaken);
 
           Object result = stack[stackPointer];
           // stackPointer -= 1;
@@ -652,7 +656,7 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
         }
 
         case RETURN_SELF: {
-          LoopNode.reportLoopCount(this, backBranchesTaken);
+          LoopNode.reportLoopCount(this, c.backBranchesTaken);
           returnValue = frame.getArguments()[0];
           nextBytecodeIndex = RETURN_FROM_METHOD;
           break;
@@ -863,7 +867,7 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
           nextBytecodeIndex = bytecodeIndex + offset;
 
           if (CompilerDirectives.inInterpreter()) {
-            backBranchesTaken += 1;
+            c.backBranchesTaken += 1;
           }
           break;
         }
@@ -922,7 +926,7 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
           nextBytecodeIndex = bytecodeIndex - offset;
 
           if (CompilerDirectives.inInterpreter()) {
-            backBranchesTaken += 1;
+            c.backBranchesTaken += 1;
           }
           break;
         }
