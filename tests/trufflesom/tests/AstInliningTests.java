@@ -9,11 +9,6 @@ import org.junit.Test;
 
 import com.oracle.truffle.api.nodes.Node;
 
-import bdt.basic.ProgramDefinitionError;
-import trufflesom.compiler.ClassGenerationContext;
-import trufflesom.compiler.MethodGenerationContext;
-import trufflesom.compiler.ParserAst;
-import trufflesom.interpreter.SomLanguage;
 import trufflesom.interpreter.nodes.ArgumentReadNode.LocalArgumentReadNode;
 import trufflesom.interpreter.nodes.ArgumentReadNode.NonLocalArgumentReadNode;
 import trufflesom.interpreter.nodes.ExpressionNode;
@@ -349,7 +344,8 @@ public class AstInliningTests extends AstTestSetup {
     assertEquals("b", readB.getInvocationIdentifier().getString());
     assertEquals(1, readB.argumentIndex);
 
-    IntUninitIncFieldNode incNode = read(blockBIfTrue, "bodyNode", IntUninitIncFieldNode.class);
+    IntUninitIncFieldNode incNode =
+        read(blockBIfTrue, "bodyNode", IntUninitIncFieldNode.class);
     NonLocalArgumentReadNode selfNode = (NonLocalArgumentReadNode) incNode.getSelf();
     assertEquals(2, selfNode.getContextLevel());
     assertEquals(0, (int) read(incNode, "fieldIndex", Integer.class));
