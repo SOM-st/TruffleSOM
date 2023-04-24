@@ -50,13 +50,22 @@ import trufflesom.interpreter.Method;
 import trufflesom.interpreter.nodes.ExpressionNode;
 import trufflesom.interpreter.nodes.FieldNode;
 import trufflesom.interpreter.nodes.FieldNode.FieldReadNode;
-import trufflesom.interpreter.nodes.FieldNode.UninitFieldIncNode;
 import trufflesom.interpreter.nodes.FieldNodeFactory.FieldWriteNodeGen;
+import trufflesom.interpreter.nodes.LocalVariableNode.LocalVariableReadNode;
+import trufflesom.interpreter.nodes.NonLocalVariableNode.NonLocalVariableReadNode;
 import trufflesom.interpreter.nodes.ReturnNonLocalNode;
 import trufflesom.interpreter.nodes.ReturnNonLocalNode.CatchNonLocalReturnNode;
+import trufflesom.interpreter.nodes.UninitializedMessageSendNode;
 import trufflesom.interpreter.nodes.literals.BlockNode;
-import trufflesom.interpreter.nodes.specialized.IntIncrementNode;
+import trufflesom.interpreter.supernodes.IntIncrementNode;
+import trufflesom.interpreter.supernodes.LocalVarReadUnaryMsgWriteNode;
+import trufflesom.interpreter.supernodes.LocalVariableSquareNode;
+import trufflesom.interpreter.supernodes.NonLocalVarReadUnaryMsgWriteNode;
+import trufflesom.interpreter.supernodes.NonLocalVariableSquareNode;
+import trufflesom.interpreter.supernodes.UninitIncFieldNode;
 import trufflesom.primitives.Primitives;
+import trufflesom.primitives.arithmetic.AdditionPrim;
+import trufflesom.vm.NotYetImplementedException;
 import trufflesom.vmobjects.SClass;
 import trufflesom.vmobjects.SInvokable;
 import trufflesom.vmobjects.SInvokable.SMethod;
@@ -401,7 +410,56 @@ public class MethodGenerationContext
 
   public ExpressionNode getLocalWriteNode(final Variable variable,
       final ExpressionNode valExpr, final long coord) {
-    return variable.getWriteNode(getContextLevel(variable), valExpr, coord);
+    int ctxLevel = getContextLevel(variable);
+
+    if (valExpr instanceof IntIncrementNode
+        && ((IntIncrementNode) valExpr).doesAccessVariable(variable)) {
+      return ((IntIncrementNode) valExpr).createIncNode((Local) variable, ctxLevel);
+    }
+
+    if (ctxLevel == 0) {
+      if (valExpr instanceof LocalVariableSquareNode l) {
+        return variable.getReadSquareWriteNode(ctxLevel, coord, l.getLocal(), 0);
+      }
+      if (valExpr instanceof NonLocalVariableSquareNode) {
+        throw new NotYetImplementedException(
+            "a missing read/square/write combination, used in a benchmark?");
+      }
+
+      if (valExpr instanceof UninitializedMessageSendNode) {
+        UninitializedMessageSendNode val = (UninitializedMessageSendNode) valExpr;
+        ExpressionNode[] args = val.getArguments();
+        if (args.length == 1 && args[0] instanceof LocalVariableReadNode) {
+          LocalVariableReadNode var = (LocalVariableReadNode) args[0];
+          if (var.getLocal() == variable) {
+            return new LocalVarReadUnaryMsgWriteNode((Local) variable,
+                val.getInvocationIdentifier());
+          }
+        }
+      }
+    } else {
+      if (valExpr instanceof NonLocalVariableSquareNode nl) {
+        return variable.getReadSquareWriteNode(ctxLevel, coord,
+            nl.getLocal(), nl.getContextLevel());
+      }
+
+      if (valExpr instanceof LocalVariableSquareNode l) {
+        return variable.getReadSquareWriteNode(ctxLevel, coord, l.getLocal(), 0);
+      }
+
+      if (valExpr instanceof UninitializedMessageSendNode) {
+        UninitializedMessageSendNode val = (UninitializedMessageSendNode) valExpr;
+        ExpressionNode[] args = val.getArguments();
+        if (args.length == 1 && args[0] instanceof NonLocalVariableReadNode) {
+          NonLocalVariableReadNode var = (NonLocalVariableReadNode) args[0];
+          if (var.getLocal() == variable) {
+            return new NonLocalVarReadUnaryMsgWriteNode(ctxLevel, (Local) variable,
+                val.getInvocationIdentifier());
+          }
+        }
+      }
+    }
+    return variable.getWriteNode(ctxLevel, valExpr, coord);
   }
 
   protected Local getLocal(final SSymbol varName) {
@@ -451,7 +509,22 @@ public class MethodGenerationContext
     ExpressionNode self = getSelfRead(coord);
     if (exp instanceof IntIncrementNode
         && ((IntIncrementNode) exp).doesAccessField(fieldIndex)) {
-      return new UninitFieldIncNode(self, fieldIndex, coord);
+      return ((IntIncrementNode) exp).createFieldIncNode(self, fieldIndex, coord);
+    }
+
+    if (exp instanceof AdditionPrim) {
+      AdditionPrim add = (AdditionPrim) exp;
+      ExpressionNode rcvr = add.getReceiver();
+      ExpressionNode arg = add.getArgument();
+
+      if (rcvr instanceof FieldReadNode
+          && fieldIndex == ((FieldReadNode) rcvr).getFieldIndex()) {
+        return new UninitIncFieldNode(self, arg, true, fieldIndex, coord);
+      }
+      if (arg instanceof FieldReadNode
+          && fieldIndex == ((FieldReadNode) arg).getFieldIndex()) {
+        return new UninitIncFieldNode(self, rcvr, false, fieldIndex, coord);
+      }
     }
 
     return FieldWriteNodeGen.create(fieldIndex, self, exp).initialize(coord);

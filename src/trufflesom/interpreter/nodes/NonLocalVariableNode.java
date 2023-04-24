@@ -24,7 +24,7 @@ public abstract class NonLocalVariableNode extends ContextualNode
   protected final int   slotIndex;
   protected final Local local;
 
-  private NonLocalVariableNode(final int contextLevel, final Local local) {
+  protected NonLocalVariableNode(final int contextLevel, final Local local) {
     super(contextLevel);
     this.local = local;
     this.slotIndex = local.getIndex();
@@ -37,6 +37,10 @@ public abstract class NonLocalVariableNode extends ContextualNode
 
   public Local getLocal() {
     return local;
+  }
+
+  public boolean isSameLocal(final NonLocalVariableNode node) {
+    return local.equals(node.local);
   }
 
   public abstract static class NonLocalVariableReadNode extends NonLocalVariableNode {

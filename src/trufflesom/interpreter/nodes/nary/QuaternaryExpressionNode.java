@@ -6,8 +6,8 @@ import com.oracle.truffle.api.dsl.NodeChildren;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
 import trufflesom.interpreter.bc.RespecializeException;
+import trufflesom.interpreter.nodes.AbstractMessageSendNode;
 import trufflesom.interpreter.nodes.ExpressionNode;
-import trufflesom.interpreter.nodes.GenericMessageSendNode;
 import trufflesom.interpreter.nodes.MessageSendNode;
 import trufflesom.interpreter.nodes.bc.BytecodeLoopNode;
 import trufflesom.vm.VmSettings;
@@ -38,25 +38,19 @@ public abstract class QuaternaryExpressionNode extends EagerlySpecializableNode 
     return executeEvaluated(frame, arguments[0], arguments[1], arguments[2], arguments[3]);
   }
 
-  protected GenericMessageSendNode makeGenericSend(final SSymbol selector) {
+  protected AbstractMessageSendNode makeGenericSend(final SSymbol selector) {
     CompilerDirectives.transferToInterpreterAndInvalidate();
-    ExpressionNode[] children;
-    if (VmSettings.UseAstInterp) {
-      children = new ExpressionNode[] {getReceiver(), getArg1(), getArg2(), getArg3()};
-    } else {
-      children = null;
-    }
-
-    GenericMessageSendNode send =
-        MessageSendNode.createGeneric(selector, children, sourceCoord);
 
     if (VmSettings.UseAstInterp) {
+      AbstractMessageSendNode send = MessageSendNode.createGenericQuat(
+          selector, getReceiver(), getArg1(), getArg2(), getArg3(), sourceCoord);
       replace(send);
       send.notifyDispatchInserted();
       return send;
     }
 
     assert getParent() instanceof BytecodeLoopNode : "This node was expected to be a direct child of a `BytecodeLoopNode`.";
-    throw new RespecializeException(send);
+    throw new RespecializeException(MessageSendNode.createGenericQuat(
+        selector, null, null, null, null, sourceCoord));
   }
 }

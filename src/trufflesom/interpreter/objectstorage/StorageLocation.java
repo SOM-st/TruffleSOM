@@ -1,7 +1,5 @@
 package trufflesom.interpreter.objectstorage;
 
-import java.lang.reflect.Field;
-
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.nodes.UnexpectedResultException;
@@ -24,16 +22,12 @@ import trufflesom.vmobjects.SObject;
 public abstract class StorageLocation {
   private static final Unsafe unsafe = UnsafeUtil.load();
 
-  public static long getFieldOffset(final Field field) {
-    return unsafe.objectFieldOffset(field);
-  }
-
   public interface LongStorageLocation {
     long readLong(SObject obj) throws UnexpectedResultException;
 
     void writeLong(SObject obj, long value);
 
-    long increment(SObject obj);
+    long increment(SObject obj, long incValue);
   }
 
   public interface DoubleStorageLocation {
@@ -343,9 +337,9 @@ public abstract class StorageLocation {
     }
 
     @Override
-    public long increment(final SObject obj) {
+    public long increment(final SObject obj, final long incValue) {
       long val = unsafe.getLong(obj, fieldMemoryOffset);
-      long result = Math.addExact(val, 1);
+      long result = Math.addExact(val, incValue);
       unsafe.putLong(obj, fieldMemoryOffset, result);
       return result;
     }
@@ -425,9 +419,9 @@ public abstract class StorageLocation {
     }
 
     @Override
-    public long increment(final SObject obj) {
+    public long increment(final SObject obj, final long incValue) {
       long val = obj.getExtendedPrimFields()[extensionIndex];
-      long result = Math.addExact(val, 1);
+      long result = Math.addExact(val, incValue);
       obj.getExtendedPrimFields()[extensionIndex] = result;
       return result;
     }

@@ -84,9 +84,9 @@ public abstract class FieldAccessorNode extends Node {
     }
   }
 
-  private static final class UninitializedReadFieldNode extends AbstractReadFieldNode {
+  public static final class UninitializedReadFieldNode extends AbstractReadFieldNode {
 
-    UninitializedReadFieldNode(final int fieldIndex) {
+    public UninitializedReadFieldNode(final int fieldIndex) {
       super(fieldIndex);
     }
 
@@ -339,24 +339,24 @@ public abstract class FieldAccessorNode extends Node {
       return layout == obj.getObjectLayout();
     }
 
-    public long increment(final SObject obj) {
+    public long increment(final SObject obj, final long incValue) {
       try {
         if (hasExpectedLayout(obj)) {
-          return storage.increment(obj);
+          return storage.increment(obj, incValue);
         } else {
           ensureNext(obj);
-          return nextInCache.increment(obj);
+          return nextInCache.increment(obj, incValue);
         }
       } catch (InvalidAssumptionException e) {
         CompilerDirectives.transferToInterpreterAndInvalidate();
         ensureNext(obj);
-        return dropAndIncrementNext(obj);
+        return dropAndIncrementNext(obj, incValue);
       }
     }
 
     @InliningCutoff
-    private long dropAndIncrementNext(final SObject obj) {
-      return replace(SOMNode.unwrapIfNeeded(nextInCache)).increment(obj);
+    private long dropAndIncrementNext(final SObject obj, final long incValue) {
+      return replace(SOMNode.unwrapIfNeeded(nextInCache)).increment(obj, incValue);
     }
 
     @InliningCutoff

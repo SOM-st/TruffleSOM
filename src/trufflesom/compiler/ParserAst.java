@@ -27,10 +27,15 @@ import com.oracle.truffle.api.source.Source;
 import bdt.basic.ProgramDefinitionError;
 import bdt.inlining.InlinableNodes;
 import bdt.tools.structure.StructuralProbe;
+import trufflesom.interpreter.nodes.ArgumentReadNode.LocalArgumentReadNode;
+import trufflesom.interpreter.nodes.ArgumentReadNode.NonLocalArgumentReadNode;
 import trufflesom.interpreter.nodes.ExpressionNode;
 import trufflesom.interpreter.nodes.FieldNode;
+import trufflesom.interpreter.nodes.FieldNode.FieldReadNode;
 import trufflesom.interpreter.nodes.GlobalNode;
+import trufflesom.interpreter.nodes.LocalVariableNode.LocalVariableReadNode;
 import trufflesom.interpreter.nodes.MessageSendNode;
+import trufflesom.interpreter.nodes.NonLocalVariableNode.NonLocalVariableReadNode;
 import trufflesom.interpreter.nodes.SequenceNode;
 import trufflesom.interpreter.nodes.literals.BlockNode;
 import trufflesom.interpreter.nodes.literals.BlockNode.BlockNodeWithContext;
@@ -38,9 +43,20 @@ import trufflesom.interpreter.nodes.literals.DoubleLiteralNode;
 import trufflesom.interpreter.nodes.literals.GenericLiteralNode;
 import trufflesom.interpreter.nodes.literals.IntegerLiteralNode;
 import trufflesom.interpreter.nodes.literals.LiteralNode;
-import trufflesom.interpreter.nodes.specialized.IntIncrementNodeGen;
+import trufflesom.interpreter.nodes.specialized.IfInlinedLiteralNode;
+import trufflesom.interpreter.supernodes.GreaterThanIntNodeGen;
+import trufflesom.interpreter.supernodes.IntIncrementNodeGen;
+import trufflesom.interpreter.supernodes.LessThanIntNodeGen;
+import trufflesom.interpreter.supernodes.LocalArgGreaterThanInt;
+import trufflesom.interpreter.supernodes.LocalArgLessThanInt;
+import trufflesom.interpreter.supernodes.LocalFieldStringEqualsNode;
+import trufflesom.interpreter.supernodes.LocalVariableSquareNodeGen;
+import trufflesom.interpreter.supernodes.NonLocalFieldStringEqualsNode;
+import trufflesom.interpreter.supernodes.NonLocalVariableSquareNodeGen;
+import trufflesom.interpreter.supernodes.StringEqualsNodeGen;
 import trufflesom.primitives.Primitives;
 import trufflesom.vm.Globals;
+import trufflesom.vm.NotYetImplementedException;
 import trufflesom.vmobjects.SArray;
 import trufflesom.vmobjects.SClass;
 import trufflesom.vmobjects.SInvokable;
@@ -255,6 +271,92 @@ public class ParserAst extends Parser<MethodGenerationContext> {
           mgenc.getHolder().getSuperClass(), msg, args, coordWithL);
     }
 
+    String binSelector = msg.getString();
+
+    if (binSelector.equals("*")) {
+      if (receiver instanceof LocalVariableReadNode rcvr
+          && operand instanceof LocalVariableReadNode op) {
+        if (rcvr.isSameLocal(op)) {
+          return LocalVariableSquareNodeGen.create(rcvr.getLocal()).initialize(coordWithL);
+        }
+      } else if (receiver instanceof NonLocalVariableReadNode rcvr
+          && operand instanceof NonLocalVariableReadNode op) {
+        if (rcvr.isSameLocal(op)) {
+          assert rcvr.getContextLevel() == op.getContextLevel();
+          return NonLocalVariableSquareNodeGen.create(
+              rcvr.getContextLevel(), rcvr.getLocal()).initialize(coordWithL);
+        }
+      }
+    } else if (binSelector.equals("=")) {
+      if (operand instanceof GenericLiteralNode) {
+        Object literal = operand.executeGeneric(null);
+        if (literal instanceof String l) {
+          if (receiver instanceof FieldReadNode fieldRead) {
+            ExpressionNode self = fieldRead.getSelf();
+            if (self instanceof LocalArgumentReadNode selfLocal) {
+              return new LocalFieldStringEqualsNode(fieldRead.getFieldIndex(),
+                  selfLocal.getArg(), l).initialize(coordWithL);
+            } else if (self instanceof NonLocalArgumentReadNode arg) {
+              return new NonLocalFieldStringEqualsNode(fieldRead.getFieldIndex(),
+                  arg.getArg(), arg.getContextLevel(), l).initialize(coordWithL);
+            } else {
+              throw new NotYetImplementedException();
+            }
+          }
+
+          return StringEqualsNodeGen.create(l, receiver).initialize(coordWithL);
+        }
+      }
+
+      if (receiver instanceof GenericLiteralNode) {
+        Object literal = receiver.executeGeneric(null);
+        if (literal instanceof String l) {
+          if (operand instanceof FieldReadNode fieldRead) {
+            ExpressionNode self = fieldRead.getSelf();
+            if (self instanceof LocalArgumentReadNode selfArg) {
+              return new LocalFieldStringEqualsNode(fieldRead.getFieldIndex(),
+                  selfArg.getArg(), l).initialize(coordWithL);
+            } else if (self instanceof NonLocalArgumentReadNode) {
+              NonLocalArgumentReadNode arg = (NonLocalArgumentReadNode) self;
+              return new NonLocalFieldStringEqualsNode(fieldRead.getFieldIndex(),
+                  arg.getArg(), arg.getContextLevel(), l).initialize(coordWithL);
+            } else {
+              throw new NotYetImplementedException();
+            }
+          }
+
+          return StringEqualsNodeGen.create(l, operand).initialize(coordWithL);
+        }
+      }
+    } else if (operand instanceof IntegerLiteralNode lit) {
+      if (binSelector.equals("+")) {
+        return IntIncrementNodeGen.create(lit.executeLong(null), false, receiver)
+                                  .initialize(coordWithL);
+      }
+      if (binSelector.equals("-")) {
+        return IntIncrementNodeGen.create(-lit.executeLong(null), true, receiver)
+                                  .initialize(coordWithL);
+      }
+      if (binSelector.equals(">")) {
+        if (receiver instanceof LocalArgumentReadNode rcvr) {
+          return new LocalArgGreaterThanInt(rcvr.getArg(),
+              lit.executeLong(null)).initialize(coordWithL);
+        }
+
+        return GreaterThanIntNodeGen.create(lit.executeLong(null), receiver)
+                                    .initialize(coordWithL);
+      }
+      if (binSelector.equals("<")) {
+        if (receiver instanceof LocalArgumentReadNode rcvr) {
+          return new LocalArgLessThanInt(rcvr.getArg(),
+              lit.executeLong(null)).initialize(coordWithL);
+        }
+
+        return LessThanIntNodeGen.create(lit.executeLong(null), receiver)
+                                 .initialize(coordWithL);
+      }
+    }
+
     ExpressionNode inlined =
         inlinableNodes.inline(msg, args, mgenc, coordWithL);
     if (inlined != null) {
@@ -262,11 +364,9 @@ public class ParserAst extends Parser<MethodGenerationContext> {
       return inlined;
     }
 
-    if (msg.getString().equals("+") && operand instanceof IntegerLiteralNode) {
-      IntegerLiteralNode lit = (IntegerLiteralNode) operand;
-      if (lit.executeLong(null) == 1) {
-        return IntIncrementNodeGen.create(receiver);
-      }
+    if (msg.getString().equals("+") && operand instanceof IntegerLiteralNode lit) {
+      long value = lit.executeLong(null);
+      return IntIncrementNodeGen.create(value, false, receiver);
     }
     return MessageSendNode.create(msg, args, coordWithL);
   }
@@ -299,6 +399,9 @@ public class ParserAst extends Parser<MethodGenerationContext> {
     ExpressionNode inlined = inlinableNodes.inline(msg, args, mgenc, coodWithL);
     if (inlined != null) {
       assert !isSuperSend;
+      if (args.length == 2 && inlined instanceof IfInlinedLiteralNode) {
+        return ((IfInlinedLiteralNode) inlined).asIsNilIfTrueIfPossible();
+      }
       return inlined;
     }
 
