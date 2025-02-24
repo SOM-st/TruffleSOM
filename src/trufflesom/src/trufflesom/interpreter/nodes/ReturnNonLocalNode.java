@@ -29,6 +29,7 @@ import trufflesom.bdt.inlining.ScopeAdaptationVisitor;
 import trufflesom.bdt.inlining.ScopeAdaptationVisitor.ScopeElement;
 import trufflesom.compiler.Variable.Internal;
 import trufflesom.interpreter.FrameOnStackMarker;
+import trufflesom.interpreter.Method.OpBuilder;
 import trufflesom.interpreter.ReturnException;
 import trufflesom.vmobjects.SAbstractObject;
 import trufflesom.vmobjects.SBlock;
@@ -89,6 +90,18 @@ public final class ReturnNonLocalNode extends ContextualNode {
     }
   }
 
+  @Override
+  public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+    opBuilder.dsl.beginReturnNonLocal(contextLevel);
+    expression.accept(opBuilder); // return value for the non-local return
+
+    opBuilder.dsl.beginLoadLocalMaterialized(opBuilder.getLocal(onStackMarkerVar));
+    opBuilder.dsl.emitDetermineContextOp(contextLevel);
+    opBuilder.dsl.endLoadLocalMaterialized();
+
+    opBuilder.dsl.endReturnNonLocal();
+  }
+
   /**
    * Normally, there are no local returns in SOM. However, after
    * inlining/embedding of blocks, we need this ReturnLocalNode to replace
@@ -131,6 +144,17 @@ public final class ReturnNonLocalNode extends ContextualNode {
         node.initialize(sourceCoord);
         replace(node);
       }
+    }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      opBuilder.dsl.beginBlock();
+      opBuilder.dsl.beginReturn();
+      expression.constructOperation(opBuilder, true);
+      opBuilder.dsl.endReturn();
+      opBuilder.dsl.emitLoadConstant(
+          "Hack to avoid Op DSL issue with returns in `Conditional`");
+      opBuilder.dsl.endBlock();
     }
   }
 
