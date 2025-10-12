@@ -24,12 +24,16 @@ package trufflesom.interpreter.nodes;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.BytecodeRootNode;
+import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.profiles.ValueProfile;
 
 import trufflesom.vmobjects.SBlock;
+import trufflesom.vmobjects.SInvokable.SMethod;
 
 
 public abstract class ContextualNode extends NoPreEvalExprNode {
@@ -54,11 +58,44 @@ public abstract class ContextualNode extends NoPreEvalExprNode {
     return determineContext(frame, contextLevel);
   }
 
+  @NeverDefault
+  public static final BytecodeNode determineContextNode(final VirtualFrame frame,
+      final int contextLevel) {
+    SBlock self = (SBlock) frame.getArguments()[0];
+    int i = contextLevel - 1;
+
+    while (i > 0) {
+      self = (SBlock) self.getOuterSelf();
+      i--;
+    }
+
+    SMethod outer = ((SMethod) self.getMethod()).getOuterMethod();
+    return ((BytecodeRootNode) outer.getInvokable()).getBytecodeNode();
+  }
+
   @ExplodeLoop
   @InliningCutoff
   public static final MaterializedFrame determineContext(final VirtualFrame frame,
       final int contextLevel) {
     CompilerAsserts.partialEvaluationConstant(contextLevel);
+
+    SBlock self = (SBlock) frame.getArguments()[0];
+    int i = contextLevel - 1;
+
+    while (i > 0) {
+      self = (SBlock) self.getOuterSelf();
+      i--;
+    }
+
+    // Graal needs help here to see that this is always a MaterializedFrame
+    // so, we record explicitly a class profile
+    return frameType.profile(self.getContext());
+  }
+
+  @InliningCutoff
+  public static final MaterializedFrame determineContextNoUnroll(final VirtualFrame frame,
+      final int contextLevel) {
+    CompilerDirectives.isPartialEvaluationConstant(contextLevel);
 
     SBlock self = (SBlock) frame.getArguments()[0];
     int i = contextLevel - 1;
