@@ -98,6 +98,7 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.HostCompilerDirectives.BytecodeInterpreterSwitch;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.frame.MaterializedFrame;
@@ -382,7 +383,7 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
       CompilerAsserts.partialEvaluationConstant(bytecode);
       CompilerDirectives.ensureVirtualized(stack);
 
-      switch (bytecode) {
+      switch (HostCompilerDirectives.markThreadedSwitch(bytecode)) {
         case HALT: {
           return stack[stackPointer];
         }
@@ -1542,7 +1543,7 @@ public class BytecodeLoopNode extends NoPreEvalExprNode implements ScopeReferenc
               targetContextLevel + 1, true, true, false);
           SMethod newMethod = new SMethod(blockMethod.getSignature(), adapted,
               blockMethod.getEmbeddedBlocks());
-          newMethod.setHolder(blockMethod.getHolder());
+          newMethod.setHolder(blockMethod.getHolder(), blockMethod.getOuterMethod());
           mgenc.addLiteralIfAbsent(newMethod, null);
           emitPUSHBLOCK(mgenc, newMethod, bytecodes[i] == PUSH_BLOCK);
           break;
