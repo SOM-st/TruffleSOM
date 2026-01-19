@@ -293,7 +293,6 @@ MODULE_PATH_ENTRIES = [
   TRUFFLE_DIR + '/sdk/mxbuild/dists/word.jar',
   TRUFFLE_DIR + '/sdk/mxbuild/dists/nativeimage.jar',
   TRUFFLE_DIR + '/sdk/mxbuild/dists/jniutils.jar',
-  TRUFFLE_DIR + '/truffle/mxbuild/dists/truffle-json.jar',
   TRUFFLE_DIR + '/truffle/mxbuild/dists/truffle-compiler.jar',
   TRUFFLE_DIR + '/truffle/mxbuild/dists/truffle-api.jar',
   TRUFFLE_DIR + '/truffle/mxbuild/dists/truffle-runtime.jar']
@@ -367,7 +366,7 @@ if not args.interpreter and args.graal_branch_profile:
               '-Dpolyglot.engine.InstrumentBranchesPerInlineSite=true']
 
 if not args.interpreter and args.perf_warnings:
-    flags += ['-Dpolyglot.engine.TracePerformanceWarnings=all',
+    flags += ['-Dpolyglot.compiler.TracePerformanceWarnings=all',
               '-Dpolyglot.engine.TraceCompilation=true',
               '-Dpolyglot.engine.TraceCompilationDetails=true']
 if not args.interpreter and args.trace_invalidation:
