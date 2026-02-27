@@ -33,6 +33,7 @@ import trufflesom.bdt.primitives.nodes.PreevaluatedExpression;
 import trufflesom.compiler.Variable.Argument;
 import trufflesom.compiler.bc.BytecodeGenerator;
 import trufflesom.compiler.bc.BytecodeMethodGenContext;
+import trufflesom.interpreter.Method.OpBuilder;
 import trufflesom.interpreter.nodes.ArgumentReadNode.LocalArgumentReadNode;
 import trufflesom.interpreter.nodes.ArgumentReadNode.NonLocalArgumentReadNode;
 import trufflesom.interpreter.nodes.FieldNodeFactory.FieldWriteNodeGen;
@@ -153,6 +154,16 @@ public abstract class FieldNode extends ExpressionNode {
         BytecodeGenerator.emitPUSHFIELD(mgenc, (byte) read.getFieldIndex(), (byte) 0);
       }
     }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (self instanceof NonLocalArgumentReadNode arg) {
+        opBuilder.dsl.emitNonLocalReadField(getFieldIndex(), arg.contextLevel);
+        return;
+      }
+
+      opBuilder.dsl.emitLocalReadField(read.getFieldIndex());
+    }
   }
 
   @NodeChild(value = "self", type = ExpressionNode.class)
@@ -244,6 +255,14 @@ public abstract class FieldNode extends ExpressionNode {
           new LocalArgumentReadNode(val));
       return new WriteAndReturnSelf(node);
     }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      opBuilder.dsl.beginWriteField(write.getFieldIndex());
+      getSelf().accept(opBuilder);
+      getValue().accept(opBuilder);
+      opBuilder.dsl.endWriteField();
+    }
   }
 
   public static final class WriteAndReturnSelf extends ExpressionNode
@@ -282,6 +301,17 @@ public abstract class FieldNode extends ExpressionNode {
       StorageLocation storage =
           layout.getStorageLocation(((FieldWriteNode) write).getFieldIndex());
       return new CachedFieldWriteAndSelf(rcvr.getClass(), layout, source, storage, next);
+    }
+
+    @Override
+    public void beginConstructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      FieldWriteNode n = (FieldWriteNode) write;
+      opBuilder.dsl.beginWriteFieldAndReturnSelf(n.getFieldIndex());
+    }
+
+    @Override
+    public void endConstructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      opBuilder.dsl.endWriteFieldAndReturnSelf();
     }
   }
 }
