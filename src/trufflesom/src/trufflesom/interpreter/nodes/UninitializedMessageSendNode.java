@@ -5,6 +5,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 
 import trufflesom.bdt.primitives.Specializer;
 import trufflesom.bdt.primitives.nodes.PreevaluatedExpression;
+import trufflesom.interpreter.Method.OpBuilder;
 import trufflesom.interpreter.nodes.dispatch.AbstractDispatchNode;
 import trufflesom.interpreter.nodes.dispatch.UninitializedDispatchNode;
 import trufflesom.primitives.Primitives;
@@ -67,5 +68,42 @@ public final class UninitializedMessageSendNode extends AbstractMessageSendNode 
   @Override
   public String getInvocationIdentifier() {
     return selector.getString();
+  }
+
+  @Override
+  public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+    switch (selector.getNumberOfSignatureArguments()) {
+      case 1:
+        opBuilder.dsl.beginUnarySendOp(selector);
+        break;
+      case 2:
+        opBuilder.dsl.beginBinarySendOp(selector);
+        break;
+      case 3:
+        opBuilder.dsl.beginTernarySendOp(selector);
+        break;
+      default:
+        opBuilder.dsl.beginNarySendOp(selector);
+        break;
+    }
+
+    for (var e : argumentNodes) {
+      e.accept(opBuilder);
+    }
+
+    switch (selector.getNumberOfSignatureArguments()) {
+      case 1:
+        opBuilder.dsl.endUnarySendOp();
+        break;
+      case 2:
+        opBuilder.dsl.endBinarySendOp();
+        break;
+      case 3:
+        opBuilder.dsl.endTernarySendOp();
+        break;
+      default:
+        opBuilder.dsl.endNarySendOp();
+        break;
+    }
   }
 }

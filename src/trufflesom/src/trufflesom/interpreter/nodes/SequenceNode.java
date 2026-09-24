@@ -29,6 +29,7 @@ import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.source.Source;
 
 import trufflesom.bdt.primitives.nodes.PreevaluatedExpression;
+import trufflesom.interpreter.Method.OpBuilder;
 import trufflesom.interpreter.nodes.ArgumentReadNode.LocalArgumentReadNode;
 import trufflesom.interpreter.nodes.dispatch.AbstractDispatchNode;
 
@@ -113,5 +114,18 @@ public final class SequenceNode extends NoPreEvalExprNode {
       return false;
     }
     return super.hasTag(tag);
+  }
+
+  @Override
+  public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+    opBuilder.dsl.beginBlock();
+    int lastI = expressions.length - 1;
+    int i = 0;
+    for (var e : expressions) {
+      opBuilder.setNextIsUsed(i == lastI);
+      e.accept(opBuilder);
+      i += 1;
+    }
+    opBuilder.dsl.endBlock();
   }
 }
