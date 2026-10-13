@@ -1,5 +1,9 @@
 package trufflesom.interpreter;
 
+import java.util.HashMap;
+
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -10,16 +14,19 @@ import trufflesom.bdt.inlining.nodes.WithSource;
 import trufflesom.bdt.primitives.nodes.PreevaluatedExpression;
 import trufflesom.bdt.source.SourceCoordinate;
 import trufflesom.compiler.MethodGenerationContext;
+import trufflesom.compiler.Variable.Local;
 import trufflesom.interpreter.nodes.ExpressionNode;
 import trufflesom.interpreter.nodes.dispatch.AbstractDispatchNode;
+import trufflesom.interpreter.operations.SomOperations.LexicalScopeForOp;
+import trufflesom.interpreter.operations.SomOperationsGen;
 import trufflesom.vmobjects.SClass;
 import trufflesom.vmobjects.SInvokable.SMethod;
 
 
 public abstract class Invokable extends RootNode implements WithSource {
-  protected final String name;
-  protected final Source source;
-  protected final long   sourceCoord;
+  @CompilationFinal protected String name;
+  @CompilationFinal protected Source source;
+  @CompilationFinal protected long   sourceCoord;
 
   protected SClass holder;
 
@@ -103,4 +110,10 @@ public abstract class Invokable extends RootNode implements WithSource {
       final AbstractDispatchNode next) {
     return null;
   }
+
+  public abstract Invokable convertMethod(SomOperationsGen.Builder opBuilder,
+      LexicalScopeForOp scope);
+
+  public abstract HashMap<Local, BytecodeLocal> createLocals(
+      SomOperationsGen.Builder opBuilder);
 }

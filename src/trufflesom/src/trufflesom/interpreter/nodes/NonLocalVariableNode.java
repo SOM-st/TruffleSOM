@@ -13,6 +13,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import trufflesom.bdt.inlining.ScopeAdaptationVisitor;
 import trufflesom.bdt.tools.nodes.Invocation;
 import trufflesom.compiler.Variable.Local;
+import trufflesom.interpreter.Method.OpBuilder;
 import trufflesom.vm.constants.Nil;
 import trufflesom.vmobjects.SObject;
 import trufflesom.vmobjects.SSymbol;
@@ -96,6 +97,15 @@ public abstract class NonLocalVariableNode extends ContextualNode
     public void replaceAfterScopeChange(final ScopeAdaptationVisitor inliner) {
       inliner.updateRead(local, this, contextLevel);
     }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (resultUsed) {
+        opBuilder.dsl.beginLoadLocalMaterialized(opBuilder.getLocal(local));
+        opBuilder.dsl.emitDetermineContextOp(contextLevel);
+        opBuilder.dsl.endLoadLocalMaterialized();
+      }
+    }
   }
 
   @NodeChild(value = "exp", type = ExpressionNode.class)
@@ -175,6 +185,24 @@ public abstract class NonLocalVariableNode extends ContextualNode
     @Override
     public void replaceAfterScopeChange(final ScopeAdaptationVisitor inliner) {
       inliner.updateWrite(local, this, getExp(), contextLevel);
+    }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      opBuilder.dsl.beginBlock();
+
+      opBuilder.dsl.beginStoreLocalMaterialized(opBuilder.getLocal(local));
+      opBuilder.dsl.emitDetermineContextOp(contextLevel);
+      getExp().accept(opBuilder);
+      opBuilder.dsl.endStoreLocalMaterialized();
+
+      if (resultUsed) {
+        opBuilder.dsl.beginLoadLocalMaterialized(opBuilder.getLocal(local));
+        opBuilder.dsl.emitDetermineContextOp(contextLevel);
+        opBuilder.dsl.endLoadLocalMaterialized();
+      }
+
+      opBuilder.dsl.endBlock();
     }
   }
 }

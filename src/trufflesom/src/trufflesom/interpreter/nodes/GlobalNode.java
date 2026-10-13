@@ -43,6 +43,7 @@ import trufflesom.compiler.MethodGenerationContext;
 import trufflesom.compiler.Parser.ParseError;
 import trufflesom.compiler.bc.BytecodeGenerator;
 import trufflesom.compiler.bc.BytecodeMethodGenContext;
+import trufflesom.interpreter.Method.OpBuilder;
 import trufflesom.interpreter.nodes.dispatch.AbstractDispatchNode;
 import trufflesom.interpreter.nodes.dispatch.CachedLiteralNode;
 import trufflesom.interpreter.nodes.dispatch.DispatchGuard;
@@ -145,6 +146,12 @@ public abstract class GlobalNode extends ExpressionNode
         return executeUnknownGlobal(frame);
       }
     }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (resultUsed)
+        opBuilder.dsl.emitGlobalReadOp(globalName);
+    }
   }
 
   public static final class UninitializedGlobalReadNode
@@ -243,6 +250,12 @@ public abstract class GlobalNode extends ExpressionNode
         }
       }
     }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (resultUsed)
+        opBuilder.dsl.emitGlobalCachedReadOp(assoc);
+    }
   }
 
   public static final class TrueGlobalNode extends GlobalNode {
@@ -278,6 +291,12 @@ public abstract class GlobalNode extends ExpressionNode
     public AbstractDispatchNode asDispatchNode(final Object rcvr, final Source source,
         final AbstractDispatchNode next) {
       return new CachedLiteralNode(DispatchGuard.create(rcvr), source, true, next);
+    }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (resultUsed)
+        opBuilder.dsl.emitLoadConstant(true);
     }
   }
 
@@ -315,6 +334,12 @@ public abstract class GlobalNode extends ExpressionNode
         final AbstractDispatchNode next) {
       return new CachedLiteralNode(DispatchGuard.create(rcvr), source, false, next);
     }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (resultUsed)
+        opBuilder.dsl.emitLoadConstant(false);
+    }
   }
 
   public static final class NilGlobalNode extends GlobalNode {
@@ -345,6 +370,12 @@ public abstract class GlobalNode extends ExpressionNode
     public AbstractDispatchNode asDispatchNode(final Object rcvr, final Source source,
         final AbstractDispatchNode next) {
       return new CachedLiteralNode(DispatchGuard.create(rcvr), source, Nil.nilObject, next);
+    }
+
+    @Override
+    public void constructOperation(final OpBuilder opBuilder, boolean resultUsed) {
+      if (resultUsed)
+        opBuilder.dsl.emitLoadConstant(Nil.nilObject);
     }
   }
 }
